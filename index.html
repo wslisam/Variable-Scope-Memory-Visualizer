@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Variable Scope & Memory Visualizer | 變數範圍與記憶體視覺化工具</title>
+    <!-- Removed external icon to avoid trust issues, using font-awesome instead -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .glass-box {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: all 0.5s ease;
+        }
+        .var-ball {
+            transition: all 0.3s ease;
+            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes fadeOutSlow {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(0.9); opacity: 0.5; filter: grayscale(50%); }
+            100% { transform: scale(0.8); opacity: 0; filter: grayscale(100%) blur(5px); }
+        }
+        .fade-out-anim { animation: fadeOutSlow 2s ease forwards; }
+        .code-line { transition: background-color 0.2s; border-left: 4px solid transparent; }
+        .active-line { background-color: #fef08a; border-left: 4px solid #eab308; color: #1e293b !important; }
+        
+        /* Syntax Highlighting */
+        .keyword { color: #c678dd; }
+        .string { color: #98c379; }
+        .function { color: #61afef; }
+        .variable { color: #e06c75; }
+        .comment { color: #5c6370; font-style: italic; }
+        .bracket { color: #abb2bf; }
+
+        .error-shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        
+        /* Custom Scrollbar for Terminal */
+        .terminal-scroll::-webkit-scrollbar { width: 8px; }
+        .terminal-scroll::-webkit-scrollbar-track { background: #1e1e1e; }
+        .terminal-scroll::-webkit-scrollbar-thumb { background: #555; border-radius: 4px; }
+        .terminal-scroll::-webkit-scrollbar-thumb:hover { background: #777; }
+        
+        /* Highlight latest terminal output */
+        .terminal-new {
+            animation: highlightText 1.5s ease-out forwards;
+        }
+        @keyframes highlightText {
+            0% { background-color: rgba(255, 255, 255, 0.2); }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="bg-blue-600 text-white p-4 shadow-md flex justify-between items-center">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <i class="fa-solid fa-microchip"></i>
+            <span id="title-text">Variable Scope & Memory Visualizer</span>
+        </h1>
+        <div class="flex items-center gap-4 text-sm">
+            <span class="opacity-90">Created by Sam Li</span>
+            <button onclick="toggleLang()" class="bg-blue-500 hover:bg-blue-400 px-3 py-1 rounded transition shadow-sm" title="Switch Language / 切換語言">
+                <i class="fa-solid fa-language"></i> <span id="lang-btn">中 / EN</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-6 flex flex-col lg:flex-row gap-6 max-w-7xl mx-auto w-full">
+        
+        <!-- Left Panel: Code Execution -->
+        <div class="w-full lg:w-1/3 bg-white rounded-xl shadow-lg p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-4 border-b pb-2">
+                <h2 class="text-lg font-bold text-blue-700" id="code-title">Code Execution</h2>
+                <div class="flex gap-2">
+                    <button onclick="switchLang('python')" id="btn-python" class="px-3 py-1 text-xs font-bold rounded bg-blue-100 text-blue-700 border border-blue-300 transition" title="Switch to Python">Python</button>
+                    <button onclick="switchLang('cpp')" id="btn-cpp" class="px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 transition" title="Switch to C++">C++</button>
+                </div>
+            </div>
+            
+            <!-- Code Editor Area -->
+            <div class="bg-[#282c34] text-[#abb2bf] p-4 rounded-lg font-mono text-sm mb-4 flex-grow overflow-x-auto shadow-inner" id="code-container">
+                <!-- Python Code -->
+                <div id="code-python">
+                    <div id="py-line-0" class="code-line px-2 py-1">1. <span class="variable">global_var</span> = <span class="string">"Earth"</span></div>
+                    <div id="py-line-1" class="code-line px-2 py-1">2. </div>
+                    <div id="py-line-2" class="code-line px-2 py-1">3. <span class="keyword">def</span> <span class="function">explore</span><span class="bracket">()</span>:</div>
+                    <div id="py-line-3" class="code-line px-2 py-1 pl-6">4.     <span class="variable">local_var</span> = <span class="string">"Mars"</span></div>
+                    <div id="py-line-4" class="code-line px-2 py-1 pl-6">5.     <span class="function">print</span><span class="bracket">(</span><span class="variable">global_var</span><span class="bracket">)</span></div>
+                    <div id="py-line-5" class="code-line px-2 py-1 pl-6">6.     <span class="function">print</span><span class="bracket">(</span><span class="variable">local_var</span><span class="bracket">)</span></div>
+                    <div id="py-line-6" class="code-line px-2 py-1">7. </div>
+                    <div id="py-line-7" class="code-line px-2 py-1">8. <span class="function">explore</span><span class="bracket">()</span></div>
+                    <div id="py-line-8" class="code-line px-2 py-1">9. <span class="function">print</span><span class="bracket">(</span><span class="variable">global_var</span><span class="bracket">)</span></div>
+                    <div id="py-line-9" class="code-line px-2 py-1">10. <span class="function">print</span><span class="bracket">(</span><span class="variable">local_var</span><span class="bracket">)</span> <span class="text-red-400 text-xs font-bold bg-red-900/30 px-1 rounded error-comment" style="display:none;"># ERROR!</span></div>
+                </div>
+                <!-- C++ Code -->
+                <div id="code-cpp" class="hidden">
+                    <div id="cpp-line-0" class="code-line px-2 py-1">1. <span class="keyword">#include</span> <span class="string">&lt;iostream&gt;</span></div>
+                    <div id="cpp-line-1" class="code-line px-2 py-1">2. <span class="keyword">#include</span> <span class="string">&lt;string&gt;</span></div>
+                    <div id="cpp-line-2" class="code-line px-2 py-1">3. <span class="keyword">using namespace</span> std;</div>
+                    <div id="cpp-line-3" class="code-line px-2 py-1">4. </div>
+                    <div id="cpp-line-4" class="code-line px-2 py-1">5. <span class="keyword">string</span> <span class="variable">global_var</span> = <span class="string">"Earth"</span>;</div>
+                    <div id="cpp-line-5" class="code-line px-2 py-1">6. </div>
+                    <div id="cpp-line-6" class="code-line px-2 py-1">7. <span class="keyword">void</span> <span class="function">explore</span><span class="bracket">()</span> {</div>
+                    <div id="cpp-line-7" class="code-line px-2 py-1 pl-6">8.     <span class="keyword">string</span> <span class="variable">local_var</span> = <span class="string">"Mars"</span>;</div>
+                    <div id="cpp-line-8" class="code-line px-2 py-1 pl-6">9.     cout &lt;&lt; <span class="variable">global_var</span> &lt;&lt; endl;</div>
+                    <div id="cpp-line-9" class="code-line px-2 py-1 pl-6">10.    cout &lt;&lt; <span class="variable">local_var</span> &lt;&lt; endl;</div>
+                    <div id="cpp-line-10" class="code-line px-2 py-1">11. }</div>
+                    <div id="cpp-line-11" class="code-line px-2 py-1">12. </div>
+                    <div id="cpp-line-12" class="code-line px-2 py-1">13. <span class="keyword">int</span> <span class="function">main</span><span class="bracket">()</span> {</div>
+                    <div id="cpp-line-13" class="code-line px-2 py-1 pl-6">14.    <span class="function">explore</span><span class="bracket">()</span>;</div>
+                    <div id="cpp-line-14" class="code-line px-2 py-1 pl-6">15.    cout &lt;&lt; <span class="variable">global_var</span> &lt;&lt; endl;</div>
+                    <div id="cpp-line-15" class="code-line px-2 py-1 pl-6">16.    cout &lt;&lt; <span class="variable">local_var</span> &lt;&lt; endl; <span class="text-red-400 text-xs font-bold bg-red-900/30 px-1 rounded error-comment" style="display:none;">// ERROR!</span></div>
+                    <div id="cpp-line-16" class="code-line px-2 py-1 pl-6">17.    <span class="keyword">return</span> 0;</div>
+                    <div id="cpp-line-17" class="code-line px-2 py-1">18. }</div>
+                </div>
+            </div>
+
+            <div class="flex gap-2 mt-auto">
+                <button onclick="stepBackward()" id="prev-btn" class="flex-1 bg-slate-500 hover:bg-slate-600 text-white py-2 rounded-lg font-semibold transition flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" title="Go back one step">
+                    <i class="fa-solid fa-backward-step"></i> <span id="prev-text">Prev</span>
+                </button>
+                <button onclick="stepCode()" id="step-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-semibold transition flex justify-center items-center gap-2 shadow-sm" title="Execute next line">
+                    <i class="fa-solid fa-forward-step"></i> <span id="next-text">Next</span>
+                </button>
+                <button onclick="resetApp()" id="reset-btn" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded-lg font-semibold transition flex justify-center items-center gap-2 shadow-sm" title="Restart execution">
+                    <i class="fa-solid fa-rotate-right"></i> <span id="reset-text">Reset</span>
+                </button>
+            </div>
+            
+            <div class="mt-4 flex flex-col gap-2">
+                <!-- Explanation Panel -->
+                <div class="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-800 h-24 overflow-y-auto shadow-inner">
+                    <i class="fa-solid fa-circle-info mr-1"></i> <span id="explanation-text">Click 'Next' to start execution.</span>
+                </div>
+                
+                <!-- Terminal Output -->
+                <div>
+                    <h3 class="text-sm font-bold text-slate-600 mb-1 flex items-center gap-2" id="console-title"><i class="fa-solid fa-terminal"></i> Terminal Output</h3>
+                    <div id="console-output" class="p-3 bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm rounded h-32 overflow-y-auto terminal-scroll shadow-inner leading-relaxed">
+                        <span class="text-slate-500">> System Ready...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Visualization -->
+        <div class="w-full lg:w-2/3 bg-white rounded-xl shadow-lg p-6 relative overflow-hidden flex flex-col items-center justify-center min-h-[450px] border border-slate-100">
+            <h2 class="text-lg font-bold mb-4 absolute top-6 left-6 text-blue-700 flex items-center gap-2" id="vis-title"><i class="fa-solid fa-memory"></i> Memory Visualizer</h2>
+            
+            <!-- Global Scope Box -->
+            <div id="global-box" class="glass-box w-full max-w-lg h-96 rounded-2xl p-4 relative border-2 border-blue-300 bg-blue-50/50 mt-8">
+                <span class="absolute top-2 left-4 text-xs font-bold text-blue-600 uppercase tracking-wider bg-white px-2 py-1 rounded shadow-sm" id="global-label">Global Scope (Heap/Data Segment)</span>
+                
+                <div id="global-vars" class="flex gap-4 mt-10 flex-wrap p-2">
+                    <!-- Global vars injected here -->
+                </div>
+
+                <!-- Local Scope Box -->
+                <div id="local-box" class="glass-box w-11/12 h-48 rounded-xl p-4 absolute bottom-4 left-1/2 transform -translate-x-1/2 border-2 border-emerald-400 bg-emerald-50/80 hidden shadow-md">
+                    <span class="absolute top-2 left-4 text-xs font-bold text-emerald-700 uppercase tracking-wider bg-white px-2 py-1 rounded shadow-sm" id="local-label">Local Scope (Stack: explore function)</span>
+                    
+                    <div id="local-vars" class="flex gap-4 mt-10 flex-wrap p-2">
+                        <!-- Local vars injected here -->
+                    </div>
+                    
+                    <!-- Memory Freeing Overlay -->
+                    <div id="local-destroy-overlay" class="absolute inset-0 bg-red-500/20 backdrop-blur-[2px] rounded-xl flex items-center justify-center hidden z-10">
+                        <div class="bg-white px-4 py-2 rounded-lg shadow-lg text-red-600 font-bold text-sm flex items-center gap-2 error-shake">
+                            <i class="fa-solid fa-fire"></i> <span id="mem-free-text">Deallocating Stack Memory...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Toast -->
+            <div id="error-toast" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-red-600 text-white px-6 py-4 rounded-xl shadow-2xl hidden flex-col items-center text-center z-50 border-4 border-red-300">
+                <i class="fa-solid fa-triangle-exclamation text-4xl mb-2"></i>
+                <h3 class="font-bold text-lg mb-1" id="error-title">Scope Error</h3>
+                <p class="text-sm" id="error-msg">Variable 'local_var' is out of scope!</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Explanation Section -->
+    <section class="max-w-7xl mx-auto w-full p-6 mb-8">
+        <div class="bg-white rounded-xl shadow-lg p-6 border border-slate-100">
+            <h2 class="text-xl font-bold mb-4 text-blue-700 flex items-center gap-2" id="theory-title"><i class="fa-solid fa-book-open"></i> Theory & Concept</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+                <div class="bg-blue-50/50 p-4 rounded-lg border border-blue-100">
+                    <h3 class="font-bold text-lg mb-2 text-blue-700 flex items-center gap-2" id="global-theory-title"><i class="fa-solid fa-globe"></i> Global Variables</h3>
+                    <p class="mb-3 text-slate-700 leading-relaxed" id="global-theory-desc">Declared outside any function. They live in the "outer box" (Global Scope / Heap / Data Segment) and can be accessed by ANY code, inside or outside functions. They exist until the program ends.</p>
+                    <div class="bg-white p-3 rounded border border-blue-200 shadow-sm">
+                        <strong class="text-blue-600" id="global-ex-label">Example:</strong> <span id="global-ex">A player's total score in a game that needs to be updated from multiple different levels.</span>
+                    </div>
+                </div>
+                <div class="bg-emerald-50/50 p-4 rounded-lg border border-emerald-100">
+                    <h3 class="font-bold text-lg mb-2 text-emerald-700 flex items-center gap-2" id="local-theory-title"><i class="fa-solid fa-box-open"></i> Local Variables</h3>
+                    <p class="mb-3 text-slate-700 leading-relaxed" id="local-theory-desc">Declared inside a function. They live in an "inner box" (Local Scope / Stack). They are created when the function starts and DESTROYED (memory freed) when the function ends. Outside code cannot see them.</p>
+                    <div class="bg-white p-3 rounded border border-emerald-200 shadow-sm">
+                        <strong class="text-emerald-600" id="local-ex-label">Example:</strong> <span id="local-ex">A temporary counter used inside a specific loop or calculation that isn't needed anywhere else.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script>
+        // State & Configuration
+        let currentLang = 'en'; // Defaulting to Traditional Chinese as per prompt
+        let currentProgLang = 'python';
+        let currentStep = -1;
+        let terminalHistory = [];
+        
+        // Execution Steps mapping to line numbers and actions
+        const stepsPython = [
+            { line: 0, action: 'createGlobal', expEn: 'Program starts. Global variable is created in the global memory space.', expTc: '程式開始。全域變數在全域記憶體空間中建立。' },
+            { line: 7, action: 'callFunction', expEn: 'Calling the explore() function. The program jumps to the function definition.', expTc: '呼叫 explore() 函數。程式跳轉到函數定義處。' },
+            { line: 2, action: 'enterFunction', expEn: 'Entering explore(). A new local memory space (stack frame) is allocated specifically for this function call.', expTc: '進入 explore()。系統為這次函數呼叫分配了專屬的區域記憶體空間（堆疊幀 Stack Frame）。' },
+            { line: 3, action: 'createLocal', expEn: 'Local variable is created inside the function\'s local memory space.', expTc: '在函數的區域記憶體空間內建立區域變數 local_var。' },
+            { line: 4, action: 'accessGlobal', expEn: 'Function accesses the global variable from the outer scope. Functions can look outwards to find variables.', expTc: '函數從外部範圍存取全域變數 global_var。函數可以「向外看」來尋找變數。' },
+            { line: 5, action: 'accessLocal', expEn: 'Function accesses its own local variable from its inner scope.', expTc: '函數從自己的內部範圍存取區域變數 local_var。' },
+            { line: 6, action: 'exitFunction', expEn: 'Function finishes. Its local memory space is destroyed and freed. All local variables are gone!', expTc: '函數執行結束。其區域記憶體空間被銷毀並釋放。所有區域變數都消失了！' },
+            { line: 8, action: 'accessGlobalAfter', expEn: 'Back in main program. Global variable is still accessible because it lives until the program ends.', expTc: '回到主程式。全域變數仍然可以存取，因為它會一直存活到程式結束。' },
+            { line: 9, action: 'errorLocal', expEn: 'Error! Trying to access a local variable from outside its function. The variable no longer exists.', expTc: '錯誤！嘗試從函數外部存取區域變數。該變數已經不存在了。' }
+        ];
+
+        const stepsCpp = [
+            { line: 4, action: 'createGlobal', expEn: 'Program starts. Global variable is created in the data segment.', expTc: '程式開始。全域變數在資料區段 (Data Segment) 中建立。' },
+            { line: 12, action: 'mainStart', expEn: 'Execution begins at the main() function.', expTc: '從 main() 函數開始執行。' },
+            { line: 13, action: 'callFunction', expEn: 'Calling the explore() function. The program jumps to the function definition.', expTc: '呼叫 explore() 函數。程式跳轉到函數定義處。' },
+            { line: 6, action: 'enterFunction', expEn: 'Entering explore(). A new stack frame is pushed onto the call stack.', expTc: '進入 explore()。一個新的堆疊幀 (Stack Frame) 被推入呼叫堆疊中。' },
+            { line: 7, action: 'createLocal', expEn: 'Local variable is created on the stack within the function\'s frame.', expTc: '在函數的堆疊幀內建立區域變數 local_var。' },
+            { line: 8, action: 'accessGlobal', expEn: 'Function accesses the global variable. Functions can look outwards.', expTc: '函數存取全域變數 global_var。函數可以「向外看」。' },
+            { line: 9, action: 'accessLocal', expEn: 'Function accesses its own local variable.', expTc: '函數存取自己的區域變數 local_var。' },
+            { line: 10, action: 'exitFunction', expEn: 'Function returns. Stack frame is popped and memory is freed. Local variables are destroyed!', expTc: '函數返回。堆疊幀被彈出並釋放記憶體。區域變數被銷毀！' },
+            { line: 14, action: 'accessGlobalAfter', expEn: 'Back in main(). Global variable is still accessible.', expTc: '回到 main()。全域變數仍然可以存取。' },
+            { line: 15, action: 'errorLocal', expEn: 'Compilation Error! local_var is out of scope. It cannot be seen from main().', expTc: '編譯錯誤！local_var 超出範圍 (Out of scope)。它無法從 main() 中被看見。' }
+        ];
+
+        const dict = {
+            en: {
+                title: "Variable Scope & Memory Visualizer",
+                langBtn: "中 / EN",
+                codeTitle: "Code Execution",
+                visTitle: "Memory Visualizer",
+                prevBtn: "Prev",
+                nextBtn: "Next",
+                resetBtn: "Reset",
+                consoleTitle: "Terminal Output",
+                globalLabel: "Global Scope (Heap/Data Segment)",
+                localLabel: "Local Scope (Stack: explore function)",
+                errorTitle: "Scope Error",
+                errorMsgPy: "NameError: name 'local_var' is not defined! The local memory was destroyed.",
+                errorMsgCpp: "Compilation Error: 'local_var' was not declared in this scope.",
+                theoryTitle: "Theory & Concept",
+                globalTheoryTitle: "Global Variables",
+                globalTheoryDesc: "Declared outside any function. They live in the 'outer box' (Global Scope / Heap / Data Segment) and can be accessed by ANY code, inside or outside functions. They exist until the program ends.",
+                localTheoryTitle: "Local Variables",
+                localTheoryDesc: "Declared inside a function. They live in an 'inner box' (Local Scope / Stack). They are created when the function starts and DESTROYED (memory freed) when the function ends. Outside code cannot see them.",
+                exampleLabel: "Example:",
+                globalEx: "A player's total score in a game that needs to be updated from multiple different levels.",
+                localEx: "A temporary counter used inside a specific loop or calculation that isn't needed anywhere else.",
+                memFree: "Deallocating Stack Memory...",
+                initExp: "Click 'Next' to start execution step-by-step."
+            },
+            tc: {
+                title: "變數範圍與記憶體視覺化工具",
+                langBtn: "中 / EN",
+                codeTitle: "程式碼執行",
+                visTitle: "記憶體視覺化",
+                prevBtn: "上一步",
+                nextBtn: "下一步",
+                resetBtn: "重設",
+                consoleTitle: "終端機輸出",
+                globalLabel: "全域範圍 (Global Scope / Heap / Data Segment)",
+                localLabel: "區域範圍 (Local Scope / Stack: explore 函數)",
+                errorTitle: "範圍錯誤 (Scope Error)",
+                errorMsgPy: "名稱錯誤 (NameError)：找不到 local_var！區域記憶體已經被銷毀了。",
+                errorMsgCpp: "編譯錯誤：'local_var' 在此範圍內未宣告 (Out of scope)。",
+                theoryTitle: "原理解釋",
+                globalTheoryTitle: "全域變數 (Global Variables)",
+                globalTheoryDesc: "在所有函數外部宣告。它們存在於「最外層的箱子」（全域範圍 / Heap / Data Segment），任何代碼（無論內外）都可以存取。它們會一直存活到程式結束。",
+                localTheoryTitle: "區域變數 (Local Variables)",
+                localTheoryDesc: "在函數內部宣告。它們存在於「內層的箱子」（區域範圍 / Stack）。當函數執行時建立，函數結束時就會被銷毀（釋放記憶體）。外部代碼無法看見它們。",
+                exampleLabel: "例子：",
+                globalEx: "遊戲中玩家的總分，可能需要在多個不同的關卡中被更新。",
+                localEx: "在特定迴圈或計算中使用的暫時記數器，其他地方不需要用到。",
+                memFree: "正在釋放堆疊記憶體...",
+                initExp: "點擊「下一步」開始逐步執行程式。"
+            }
+        };
+
+        function toggleLang() {
+            currentLang = currentLang === 'en' ? 'tc' : 'en';
+            updateUI();
+            if(currentStep >= 0) {
+                const steps = currentProgLang === 'python' ? stepsPython : stepsCpp;
+                document.getElementById('explanation-text').innerText = currentLang === 'en' ? steps[currentStep].expEn : steps[currentStep].expTc;
+            }
+        }
+
+        function switchLang(lang) {
+            currentProgLang = lang;
+            
+            // Update buttons
+            document.getElementById('btn-python').className = lang === 'python' 
+                ? "px-3 py-1 text-xs font-bold rounded bg-blue-100 text-blue-700 border border-blue-300 transition" 
+                : "px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 transition";
+            
+            document.getElementById('btn-cpp').className = lang === 'cpp' 
+                ? "px-3 py-1 text-xs font-bold rounded bg-blue-100 text-blue-700 border border-blue-300 transition" 
+                : "px-3 py-1 text-xs font-bold rounded bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200 transition";
+
+            // Toggle code visibility
+            document.getElementById('code-python').classList.toggle('hidden', lang !== 'python');
+            document.getElementById('code-cpp').classList.toggle('hidden', lang !== 'cpp');
+
+            resetApp();
+        }
+
+        function updateUI() {
+            const t = dict[currentLang];
+            document.getElementById('title-text').innerText = t.title;
+            document.getElementById('lang-btn').innerText = t.langBtn;
+            document.getElementById('code-title').innerText = t.codeTitle;
+            document.getElementById('vis-title').innerHTML = `<i class="fa-solid fa-memory"></i> ${t.visTitle}`;
+            document.getElementById('prev-text').innerText = t.prevBtn;
+            document.getElementById('next-text').innerText = t.nextBtn;
+            document.getElementById('reset-text').innerText = t.resetBtn;
+            document.getElementById('console-title').innerHTML = `<i class="fa-solid fa-terminal"></i> ${t.consoleTitle}`;
+            document.getElementById('global-label').innerText = t.globalLabel;
+            document.getElementById('local-label').innerText = t.localLabel;
+            document.getElementById('error-title').innerText = t.errorTitle;
+            document.getElementById('theory-title').innerHTML = `<i class="fa-solid fa-book-open"></i> ${t.theoryTitle}`;
+            document.getElementById('global-theory-title').innerHTML = `<i class="fa-solid fa-globe"></i> ${t.globalTheoryTitle}`;
+            document.getElementById('global-theory-desc').innerText = t.globalTheoryDesc;
+            document.getElementById('local-theory-title').innerHTML = `<i class="fa-solid fa-box-open"></i> ${t.localTheoryTitle}`;
+            document.getElementById('local-theory-desc').innerText = t.localTheoryDesc;
+            document.getElementById('global-ex-label').innerText = t.exampleLabel;
+            document.getElementById('local-ex-label').innerText = t.exampleLabel;
+            document.getElementById('global-ex').innerText = t.globalEx;
+            document.getElementById('local-ex').innerText = t.localEx;
+            document.getElementById('mem-free-text').innerText = t.memFree;
+            
+            if(currentStep === -1) {
+                document.getElementById('explanation-text').innerText = t.initExp;
+            }
+        }
+
+        function renderTerminal() {
+            const consoleDiv = document.getElementById('console-output');
+            let html = '<span class="text-slate-500">> System Ready...</span><br>';
+            
+            terminalHistory.forEach((item, index) => {
+                const color = item.isError ? 'text-red-400 font-bold' : 'text-[#98c379]';
+                // Add highlight class only to the newest item if it was just added
+                const highlightClass = (index === terminalHistory.length - 1 && item.isNew) ? 'terminal-new inline-block w-full' : '';
+                html += `<span class="${color} ${highlightClass}">> ${item.msg}</span><br>`;
+                // Reset isNew flag after rendering
+                item.isNew = false;
+            });
+            
+            consoleDiv.innerHTML = html;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        function logConsole(msg, isError = false) {
+            terminalHistory.push({ msg, isError, isNew: true });
+            renderTerminal();
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.code-line').forEach(el => {
+                el.classList.remove('active-line');
+            });
+        }
+
+        function highlightLine(lineIndex) {
+            clearHighlights();
+            const prefix = currentProgLang === 'python' ? 'py' : 'cpp';
+            const lineEl = document.getElementById(`${prefix}-line-${lineIndex}`);
+            if(lineEl) {
+                lineEl.classList.add('active-line');
+                // Ensure the highlighted line is visible in the container
+                lineEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+
+        function renderState(targetStep) {
+            // Reset UI to initial state
+            clearHighlights();
+            document.getElementById('global-vars').innerHTML = '';
+            document.getElementById('local-vars').innerHTML = '';
+            terminalHistory = [];
+            
+            const localBox = document.getElementById('local-box');
+            localBox.classList.add('hidden');
+            localBox.classList.remove('fade-out-anim');
+            localBox.style.display = '';
+            document.getElementById('local-destroy-overlay').classList.add('hidden');
+
+            document.getElementById('error-toast').classList.add('hidden');
+            document.getElementById('error-toast').classList.remove('flex', 'error-shake');
+            document.querySelectorAll('.error-comment').forEach(el => el.style.display = 'none');
+            
+            renderTerminal();
+            document.getElementById('explanation-text').innerText = dict[currentLang].initExp;
+            
+            const stepBtn = document.getElementById('step-btn');
+            stepBtn.disabled = false;
+            stepBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+            document.getElementById('prev-btn').disabled = targetStep <= -1;
+
+            const steps = currentProgLang === 'python' ? stepsPython : stepsCpp;
+
+            // Replay actions up to targetStep
+            for (let i = 0; i <= targetStep; i++) {
+                const step = steps[i];
+                if (i === targetStep) {
+                    highlightLine(step.line);
+                    document.getElementById('explanation-text').innerText = currentLang === 'en' ? step.expEn : step.expTc;
+                }
+                executeAction(step.action, i === targetStep);
+            }
+        }
+
+        function stepCode() {
+            const steps = currentProgLang === 'python' ? stepsPython : stepsCpp;
+            if (currentStep >= steps.length - 1) return;
+            currentStep++;
+            renderState(currentStep);
+        }
+
+        function stepBackward() {
+            if (currentStep <= -1) return;
+            currentStep--;
+            renderState(currentStep);
+        }
+
+        function executeAction(action, isCurrentStep) {
+            const globalVars = document.getElementById('global-vars');
+            const localVars = document.getElementById('local-vars');
+            const localBox = document.getElementById('local-box');
+
+            switch(action) {
+                case 'createGlobal':
+                    globalVars.innerHTML = `
+                        <div class="var-ball bg-blue-500 text-white px-4 py-2 rounded-full shadow-md flex items-center gap-2 border border-blue-400" id="var-global">
+                            <i class="fa-solid fa-globe"></i> global_var = "Earth"
+                        </div>`;
+                    break;
+                case 'mainStart':
+                    // Just visual step for C++
+                    break;
+                case 'callFunction':
+                    break;
+                case 'enterFunction':
+                    localBox.classList.remove('hidden', 'fade-out-anim');
+                    localBox.style.display = 'block';
+                    break;
+                case 'createLocal':
+                    localVars.innerHTML = `
+                        <div class="var-ball bg-emerald-500 text-white px-4 py-2 rounded-full shadow-md flex items-center gap-2 border border-emerald-400" id="var-local">
+                            <i class="fa-solid fa-box"></i> local_var = "Mars"
+                        </div>`;
+                    break;
+                case 'accessGlobal':
+                    if (isCurrentStep) {
+                        document.getElementById('var-global').classList.add('ring-4', 'ring-yellow-400', 'scale-110');
+                        setTimeout(() => document.getElementById('var-global')?.classList.remove('ring-4', 'ring-yellow-400', 'scale-110'), 1000);
+                        logConsole('Earth');
+                    } else {
+                        terminalHistory.push({ msg: 'Earth', isError: false, isNew: false });
+                    }
+                    break;
+                case 'accessLocal':
+                    if (isCurrentStep) {
+                        document.getElementById('var-local').classList.add('ring-4', 'ring-yellow-400', 'scale-110');
+                        setTimeout(() => document.getElementById('var-local')?.classList.remove('ring-4', 'ring-yellow-400', 'scale-110'), 1000);
+                        logConsole('Mars');
+                    } else {
+                        terminalHistory.push({ msg: 'Mars', isError: false, isNew: false });
+                    }
+                    break;
+                case 'exitFunction':
+                    if (isCurrentStep) {
+                        const overlay = document.getElementById('local-destroy-overlay');
+                        overlay.classList.remove('hidden');
+                        
+                        setTimeout(() => {
+                            localBox.classList.add('fade-out-anim');
+                        }, 1000);
+
+                        setTimeout(() => {
+                            localBox.style.display = 'none';
+                            localVars.innerHTML = '';
+                            overlay.classList.add('hidden');
+                        }, 2500);
+                    } else {
+                        localBox.style.display = 'none';
+                        localVars.innerHTML = '';
+                    }
+                    break;
+                case 'accessGlobalAfter':
+                    if (isCurrentStep) {
+                        document.getElementById('var-global').classList.add('ring-4', 'ring-yellow-400', 'scale-110');
+                        setTimeout(() => document.getElementById('var-global')?.classList.remove('ring-4', 'ring-yellow-400', 'scale-110'), 1000);
+                        logConsole('Earth');
+                    } else {
+                        terminalHistory.push({ msg: 'Earth', isError: false, isNew: false });
+                    }
+                    break;
+                case 'errorLocal':
+                    const prefix = currentProgLang === 'python' ? 'py' : 'cpp';
+                    document.querySelector(`#${prefix}-line-${currentProgLang === 'python' ? 9 : 15} .error-comment`).style.display = 'inline';
+                    
+                    const toast = document.getElementById('error-toast');
+                    document.getElementById('error-msg').innerText = currentProgLang === 'python' ? dict[currentLang].errorMsgPy : dict[currentLang].errorMsgCpp;
+                    
+                    toast.classList.remove('hidden');
+                    toast.classList.add('flex', 'error-shake');
+                    
+                    const errMsg = currentProgLang === 'python' ? "NameError: name 'local_var' is not defined" : "error: 'local_var' was not declared in this scope";
+                    if (isCurrentStep) {
+                        logConsole(errMsg, true);
+                    } else {
+                        terminalHistory.push({ msg: errMsg, isError: true, isNew: false });
+                    }
+                    
+                    document.getElementById('step-btn').disabled = true;
+                    document.getElementById('step-btn').classList.add('opacity-50', 'cursor-not-allowed');
+                    break;
+            }
+            
+            if (!isCurrentStep) {
+                renderTerminal();
+            }
+        }
+
+        function resetApp() {
+            currentStep = -1;
+            renderState(currentStep);
+        }
+
+        // Initialize
+        updateUI();
+        document.getElementById('prev-btn').disabled = true;
+    </script>
+</body>
+</html>
