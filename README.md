@@ -2,6 +2,8 @@
 
 This interactive educational tool is designed to help students understand one of the most fundamental concepts in programming: **Variable Scope** (Global vs. Local variables) and how memory is managed during function calls.
 
+<img width="1722" height="965" alt="image" src="https://github.com/user-attachments/assets/2f3d3e99-c9c0-4ab3-8c5d-a150a07fac90" />
+
 ## 🎯 What will you learn?
 By using this tool, you will visually understand:
 1. **Global Scope (Heap / Data Segment):** Variables created outside functions that live for the entire duration of the program.
